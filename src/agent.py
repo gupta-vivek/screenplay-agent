@@ -1,135 +1,61 @@
-import os
-
-from dotenv import load_dotenv, find_dotenv
 from langchain_core.messages import SystemMessage
 from langchain_deepseek import ChatDeepSeek
 from langgraph.graph import MessagesState
 from langgraph.graph import START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
-from rapidfuzz import process
-from sentence_transformers import SentenceTransformer
-
-from src.utils import get_lancedb_table, get_movie_list
-
-# Embedding Model
-MODEL_NAME = "all-mpnet-base-v2"
-model = SentenceTransformer(MODEL_NAME)
-
-# Movie List
-movie_list = get_movie_list()
-movie_titles = {el: el.lower() for el in movie_list.keys()}
-
-# Lancedb Table
-table = get_lancedb_table()
+from tools import check_movie_exists, retrieve_documents
 
 
-def init_llm() -> ChatDeepSeek:
-    """
-    Initializes the language model by setting up required environment variables and configurations.
+class ScreenplayAgent:
+    def __init__(self):
+        self.tools = [check_movie_exists, retrieve_documents]
+        self.llm = ChatDeepSeek(model="deepseek-chat")
+        self.graph = None
 
-    :return: An instance of the ChatDeepSeek language model.
-    """
-    _ = load_dotenv(find_dotenv())
-    key = os.environ.get("DEEPSEEK_API_KEY")
-    if not key:
-        raise ValueError("DEEPSEEK_API_KEY environment variable is not set.")
-    return ChatDeepSeek(model="deepseek-chat")
+    def build_graph(self) -> CompiledStateGraph:
+        """
+        Builds a state graph for an agent to process questions about movie scripts.
+        :return: A compiled state graph object
+        """
 
+        sys_msg = SystemMessage(
+            content="You are an agent that can answer questions about movie scripts present in the database."
+                    "1. When user asks a query, identify the original movie title from the query."
+                    "2. Pass the original movie title to the check_movie_exists function."
+                    "3. If the output of check_movie_exists function matches with the original movie title, use it to retrieve documents.")
 
-def fuzzy_match_title(user_input: str, titles: dict, threshold: int = 80) -> tuple | None:
-    """
-    Compares a user-input string with a list of possible titles.
+        llm_with_tools = self.llm.bind_tools(self.tools, parallel_tool_calls=False)
 
-    :param str user_input: The input string entered by the user for matching.
-    :param dict titles: A dictionary containing potential titles to match against the input.
-    :param int threshold: The minimum similarity score at which a match is considered valid.
-    :return: The best matching title from the list.
-    """
-    match = process.extractOne(user_input, titles, score_cutoff=threshold)
-    return match if match else None
+        def assistant(state: MessagesState):
+            return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
 
+        builder = StateGraph(MessagesState)
 
-def check_movie_exists(movie_title: str) -> str:
-    """
-    Checks if a given movie exists in the movie list by performing a fuzzy match on the movie title.
+        # Nodes
+        builder.add_node("assistant", assistant)
+        builder.add_node("tools", ToolNode(self.tools))
 
-    :param str movie_title: Original movie title.
-    :return: The fuzzy matched title.
-    """
-    fuzzy_movie = fuzzy_match_title(movie_title.lower(), movie_titles)
-    if fuzzy_movie and movie_list[fuzzy_movie[-1]]:
-        return fuzzy_movie[-1]
-    return "The movie does not exist in the database."
+        # Edges
+        builder.add_edge(START, "assistant")
+        builder.add_conditional_edges("assistant", tools_condition)
+        builder.add_edge("tools", "assistant")
 
+        # react_graph_memory = builder.compile(checkpointer=memory)
+        self.graph = builder.compile()
 
-def retrieve_documents(title: str, text_query: str, k: int = 3) -> list | str:
-    """
-    Retrieves a list of document texts based on the given movie title and text query.
+        return self.graph
 
-    :param str title: Movie title returned by check_movie_exists function.
-    :param str text_query: The textual content or query to match with the database.
-    :param int k: The maximum number of documents to return.
-    :return: A list of top k documents that match the query.
-    """
-    vector_query = model.encode(text_query)
-    results = \
-    table.search(query_type="hybrid").where(f"title='{title}'", prefilter=True).limit(k).vector(vector_query).text(
-        text_query).to_pandas()['text'].to_list()
-    if not results:  # ChatDeepSeek can't handle empty lists
-        return "No results found."
-    return results
+    def invoke(self, message: str) -> str:
+        """
+        Processes a given query through an agent graph and returns the final response.
 
+        :param str message: User message
+        :return: The content of the last message in the output generated by the graph.
+        """
+        output = self.graph.invoke({"messages": message})
+        return output['messages'][-1].content
 
-def build_agent_graph() -> StateGraph:
-    """
-    Builds a state graph for an agent to process questions about movie scripts.
-    :return: A compiled state graph object
-    """
-    llm = init_llm()
-
-    sys_msg = SystemMessage(
-        content="You are an agent that can answer questions about movie scripts present in the database."
-                "1. When user asks a query, identify the original movie title from the query."
-                "2. Pass the original movie title to the check_movie_exists function."
-                "3. If the output of check_movie_exists function matches with the original movie title, use it to retrieve documents.")
-
-    tools = [check_movie_exists, retrieve_documents]
-    llm_with_tools = llm.bind_tools(tools, parallel_tool_calls=False)
-
-    def assistant(state: MessagesState):
-        return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
-
-    builder = StateGraph(MessagesState)
-
-    # Nodes
-    builder.add_node("assistant", assistant)
-    builder.add_node("tools", ToolNode(tools))
-
-    # Edges
-    builder.add_edge(START, "assistant")
-    builder.add_conditional_edges("assistant", tools_condition, )
-    builder.add_edge("tools", "assistant")
-
-    # react_graph_memory = builder.compile(checkpointer=memory)
-    react_graph = builder.compile()
-
-    return react_graph
-
-
-def agent_response(agent_graph: StateGraph, query: str) -> str:
-    """
-    Processes a given query through an agent graph and returns the final response.
-
-    :param agent_graph: The agent graph.
-    :param query: Input query.
-    :return: The content of the last message in the output generated by the graph.
-    """
-    output = agent_graph.invoke({"messages": query})
-    return output['messages'][-1].content
-
-
-if __name__ == "__main__":
-    agent_graph = build_agent_graph()
-    query = "What is the script of the movie The Lord of the Rings?"
-    print(agent_response(agent_graph, query))
+agent = ScreenplayAgent()
+graph = agent.build_graph()

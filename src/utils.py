@@ -1,10 +1,10 @@
 import json
 import os
-
+from rapidfuzz import process
 import bs4
 import lancedb
 import requests
-from dotenv import load_dotenv, find_dotenv
+import config
 
 
 def get_all_movies() -> list[str]:
@@ -50,24 +50,14 @@ def get_script(script_url: str) -> str | None:
     return td_tag.text
 
 
-def get_lancedb_table():
+def get_lancedb_table() -> lancedb.db.Table:
     """
-    Retrieve a LanceDB table based on the configuration specified in environment variables.
+    Retrieve a LanceDB table
 
-    :return: The LanceDB table object corresponding to the specified table name.
+    :return: The LanceDB table
     """
-    _ = load_dotenv(find_dotenv())
-
-    # Lance DB
-    uri = os.getenv("LANCEDB_URI")
-    api_key = os.getenv("LANCEDB_API_KEY")
-    region = os.getenv("LANCEDB_REGION")
-    table_name = os.getenv("LANCEDB_TABLE_NAME")
-
-    db = lancedb.connect(uri=uri, api_key=api_key, region=region)
-
-    table = db.open_table(table_name)
-
+    db = lancedb.connect(uri=config.LANCEDB_URI, api_key=config.LANCEDB_API_KEY, region=config.LANCEDB_REGION)
+    table = db.open_table(config.LANCEDB_TABLE_NAME)
     return table
 
 
@@ -84,3 +74,16 @@ def get_movie_list() -> dict:
     with open(data_file, 'r') as f:
         movie_list = json.load(f)
     return movie_list
+
+
+def fuzzy_match_title(user_input: str, titles: dict, threshold: int = 80) -> tuple | None:
+    """
+    Compares a user-input string with a list of possible titles.
+
+    :param str user_input: The input string entered by the user for matching.
+    :param dict titles: A dictionary containing potential titles to match against the input.
+    :param int threshold: The minimum similarity score at which a match is considered valid.
+    :return: The best matching title from the list.
+    """
+    match = process.extractOne(user_input, titles, score_cutoff=threshold)
+    return match if match else None

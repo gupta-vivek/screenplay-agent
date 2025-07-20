@@ -4,7 +4,7 @@ from rapidfuzz import process
 import bs4
 import lancedb
 import requests
-import config
+from src import config
 
 
 def get_all_movies() -> list[str]:

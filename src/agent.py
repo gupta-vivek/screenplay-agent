@@ -5,7 +5,7 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
-from tools import check_movie_exists, retrieve_documents
+from src.tools import check_movie_exists, retrieve_documents
 
 
 class ScreenplayAgent:

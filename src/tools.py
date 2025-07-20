@@ -1,7 +1,7 @@
 from sentence_transformers import SentenceTransformer
 
 from src.utils import get_lancedb_table, get_movie_list, fuzzy_match_title
-from config import EMBEDDING_MODEL
+from src.config import EMBEDDING_MODEL
 
 model = SentenceTransformer(EMBEDDING_MODEL)
 

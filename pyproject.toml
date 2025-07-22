@@ -11,13 +11,13 @@ dependencies = [
     "langgraph>=0.5.3",
     "python-dotenv>=1.1.1",
     "rapidfuzz>=3.13.0",
-    "sentence_transformers>=4.1.0"
+    "sentence_transformers>=4.1.0",
+    "beautifulsoup4>=4.13.4",
+    "Requests>=2.32.4",
 ]
 
 [dependency-groups]
 dev = [
-    "beautifulsoup4>=4.13.4",
-    "Requests>=2.32.4",
     "ipykernel>=6.29.5",
     "langgraph-api>=0.2.56",
     "langgraph-cli>=0.3.3"

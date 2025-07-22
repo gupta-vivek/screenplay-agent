@@ -5,6 +5,7 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
+
 from src.tools import check_movie_exists, retrieve_documents
 
 
@@ -44,7 +45,6 @@ class ScreenplayAgent:
 
         # react_graph_memory = builder.compile(checkpointer=memory)
         self.graph = builder.compile()
-
         return self.graph
 
     def invoke(self, message: str) -> str:

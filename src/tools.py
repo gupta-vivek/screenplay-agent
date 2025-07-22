@@ -1,9 +1,8 @@
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 from src.utils import get_lancedb_table, get_movie_list, fuzzy_match_title
-from src.config import EMBEDDING_MODEL
 
-model = SentenceTransformer(EMBEDDING_MODEL)
+# model = SentenceTransformer(EMBEDDING_MODEL)
 
 # Movie List
 movie_list = get_movie_list()
@@ -35,10 +34,11 @@ def retrieve_documents(title: str, text_query: str, k: int = 3) -> list | str:
     :param int k: The maximum number of documents to return.
     :return: A list of top k documents that match the query.
     """
-    vector_query = model.encode(text_query)
+    # vector_query = model.encode(text_query)
     results = \
-        table.search(query_type="hybrid").where(f"title='{title}'", prefilter=True).limit(k).vector(vector_query).text(
-            text_query).to_pandas()['text'].to_list()
+        table.search(query_type="auto", query=text_query).where(f"title='{title}'", prefilter=True).limit(
+            k).to_pandas()['text'].to_list()
     if not results:  # ChatDeepSeek can't handle empty lists
         return "No results found."
+
     return results

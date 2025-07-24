@@ -11,9 +11,10 @@ dependencies = [
     "langgraph>=0.5.3",
     "python-dotenv>=1.1.1",
     "rapidfuzz>=3.13.0",
-    "sentence_transformers>=4.1.0",
+    #    "sentence_transformers>=4.1.0",
     "beautifulsoup4>=4.13.4",
     "Requests>=2.32.4",
+    "pandas"
 ]
 
 [dependency-groups]
